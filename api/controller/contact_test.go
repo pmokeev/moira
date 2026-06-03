@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/gofrs/uuid"
 	"github.com/moira-alert/moira"
 	"github.com/moira-alert/moira/api"
@@ -451,12 +453,15 @@ func TestAdminsCreatesContact(t *testing.T) {
 		AllowedContactTypes: map[string]struct{}{
 			contactType: {},
 		},
+		AllowedExtraAdminContactTypes: map[string]struct{}{
+			"selfstate": {},
+		},
 	}
 
 	contactsTemplate := []api.WebContact{}
 
-	Convey("Create for user", t, func() {
-		Convey("The same user", func() {
+	t.Run("Create for user", func(t *testing.T) {
+		t.Run("The same user", func(t *testing.T) {
 			contact := &dto.Contact{
 				Value: contactValue,
 				Type:  contactType,
@@ -465,11 +470,11 @@ func TestAdminsCreatesContact(t *testing.T) {
 
 			dataBase.EXPECT().SaveContact(gomock.Any()).Return(nil)
 			err := CreateContact(dataBase, auth, contactsTemplate, contact, userLogin, "")
-			So(err, ShouldBeNil)
-			So(contact.User, ShouldResemble, userLogin)
+			require.Nil(t, err)
+			require.Equal(t, userLogin, contact.User)
 		})
 
-		Convey("The same user by admin", func() {
+		t.Run("The same user by admin", func(t *testing.T) {
 			contact := &dto.Contact{
 				Value: contactValue,
 				Type:  contactType,
@@ -478,11 +483,11 @@ func TestAdminsCreatesContact(t *testing.T) {
 
 			dataBase.EXPECT().SaveContact(gomock.Any()).Return(nil)
 			err := CreateContact(dataBase, auth, contactsTemplate, contact, adminLogin, "")
-			So(err, ShouldBeNil)
-			So(contact.User, ShouldResemble, adminLogin)
+			require.Nil(t, err)
+			require.Equal(t, adminLogin, contact.User)
 		})
 
-		Convey("Non admin can not create contact for other user", func() {
+		t.Run("Non admin can not create contact for other user", func(t *testing.T) {
 			contact := &dto.Contact{
 				Value: contactValue,
 				Type:  contactType,
@@ -491,11 +496,11 @@ func TestAdminsCreatesContact(t *testing.T) {
 
 			dataBase.EXPECT().SaveContact(gomock.Any()).Return(nil)
 			err := CreateContact(dataBase, auth, contactsTemplate, contact, userLogin, "")
-			So(err, ShouldBeNil)
-			So(contact.User, ShouldResemble, userLogin)
+			require.Nil(t, err)
+			require.Equal(t, userLogin, contact.User)
 		})
 
-		Convey("Admin can create contact for other user", func() {
+		t.Run("Admin can create contact for other user", func(t *testing.T) {
 			contact := &dto.Contact{
 				Value: contactValue,
 				Type:  contactType,
@@ -504,21 +509,58 @@ func TestAdminsCreatesContact(t *testing.T) {
 
 			dataBase.EXPECT().SaveContact(gomock.Any()).Return(nil)
 			err := CreateContact(dataBase, auth, contactsTemplate, contact, adminLogin, "")
-			So(err, ShouldBeNil)
-			So(contact.User, ShouldResemble, userLogin)
+			require.Nil(t, err)
+			require.Equal(t, userLogin, contact.User)
 		})
 
-		Convey("Admin can create not allowed contact", func() {
+		t.Run("Admin cannot create not allowed contact at all", func(t *testing.T) {
 			contact := &dto.Contact{
 				Value: contactValue,
 				Type:  notAllowedContactType,
 				User:  userLogin,
 			}
 
+			err := CreateContact(dataBase, auth, contactsTemplate, contact, adminLogin, "")
+			require.NotNil(t, err)
+
+			expected := &api.ErrorResponse{
+				Err:            errors.New("cannot create contact with not allowed contact type"),
+				HTTPStatusCode: http.StatusBadRequest,
+				StatusText:     "Invalid request",
+				ErrorText:      "cannot create contact with not allowed contact type",
+			}
+			require.Equal(t, expected, err)
+		})
+
+		t.Run("Admin can create allowed for admins contact", func(t *testing.T) {
+			contact := &dto.Contact{
+				Value: contactValue,
+				Type:  "selfstate",
+				User:  userLogin,
+			}
+
 			dataBase.EXPECT().SaveContact(gomock.Any()).Return(nil)
 			err := CreateContact(dataBase, auth, contactsTemplate, contact, adminLogin, "")
-			So(err, ShouldBeNil)
-			So(contact.User, ShouldResemble, userLogin)
+			require.Nil(t, err)
+			require.Equal(t, userLogin, contact.User)
+		})
+
+		t.Run("User cannot create allowed for admins contact", func(t *testing.T) {
+			contact := &dto.Contact{
+				Value: contactValue,
+				Type:  "selfstate",
+				User:  userLogin,
+			}
+			err := CreateContact(dataBase, auth, contactsTemplate, contact, userLogin, "")
+			require.NotNil(t, err)
+
+			expected := &api.ErrorResponse{
+				Err:            errors.New("cannot create contact with not allowed contact type"),
+				HTTPStatusCode: http.StatusBadRequest,
+				StatusText:     "Invalid request",
+				ErrorText:      "cannot create contact with not allowed contact type",
+			}
+			require.Equal(t, expected, err)
 		})
 	})
 }
@@ -769,40 +811,46 @@ func TestIsAllowedContactType(t *testing.T) {
 		AllowedContactTypes: map[string]struct{}{
 			allowedContactType: {},
 		},
+		AllowedExtraAdminContactTypes: map[string]struct{}{
+			"selfstate": {},
+		},
 	}
 
-	Convey("Test isAllowedContactType", t, func() {
-		Convey("Test with user and allowed contact type", func() {
-			isAllowed := isAllowedToUseContactType(auth, user, allowedContactType)
-			So(isAllowed, ShouldBeTrue)
-		})
+	t.Run("Test with user and allowed contact type", func(t *testing.T) {
+		isAllowed := isAllowedToUseContactType(auth, user, allowedContactType)
+		require.True(t, isAllowed)
+	})
 
-		Convey("Test with user and not allowed contact type", func() {
-			isAllowed := isAllowedToUseContactType(auth, user, notAllowedContactType)
-			So(isAllowed, ShouldBeFalse)
-		})
+	t.Run("Test with user and not allowed contact type", func(t *testing.T) {
+		isAllowed := isAllowedToUseContactType(auth, user, notAllowedContactType)
+		require.False(t, isAllowed)
+	})
 
-		Convey("Test with admin and allowed contact type", func() {
-			isAllowed := isAllowedToUseContactType(auth, admin, allowedContactType)
-			So(isAllowed, ShouldBeTrue)
-		})
+	t.Run("Test with admin and allowed contact type", func(t *testing.T) {
+		isAllowed := isAllowedToUseContactType(auth, admin, allowedContactType)
+		require.True(t, isAllowed)
+	})
 
-		Convey("Test with admin and not allowed contact type", func() {
-			isAllowed := isAllowedToUseContactType(auth, admin, notAllowedContactType)
-			So(isAllowed, ShouldBeTrue)
-		})
+	t.Run("Test with admin and not allowed contact type at all", func(t *testing.T) {
+		isAllowed := isAllowedToUseContactType(auth, admin, notAllowedContactType)
+		require.False(t, isAllowed)
+	})
 
-		Convey("Test with disabled auth and not allowed contact type", func() {
-			auth.Enabled = false
-			isAllowed := isAllowedToUseContactType(auth, admin, notAllowedContactType)
-			So(isAllowed, ShouldBeTrue)
-		})
+	t.Run("Test with admin and allowed contact type only for admins", func(t *testing.T) {
+		isAllowed := isAllowedToUseContactType(auth, admin, "selfstate")
+		require.True(t, isAllowed)
+	})
 
-		Convey("Test with disabled auth and allowed contact type", func() {
-			auth.Enabled = false
-			isAllowed := isAllowedToUseContactType(auth, admin, allowedContactType)
-			So(isAllowed, ShouldBeTrue)
-		})
+	t.Run("Test with disabled auth and not allowed contact type", func(t *testing.T) {
+		auth.Enabled = false
+		isAllowed := isAllowedToUseContactType(auth, admin, notAllowedContactType)
+		require.True(t, isAllowed)
+	})
+
+	t.Run("Test with disabled auth and allowed contact type", func(t *testing.T) {
+		auth.Enabled = false
+		isAllowed := isAllowedToUseContactType(auth, admin, allowedContactType)
+		require.True(t, isAllowed)
 	})
 }
 

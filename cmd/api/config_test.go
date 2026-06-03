@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/moira-alert/moira"
 	"github.com/moira-alert/moira/cmd"
 
@@ -13,13 +15,14 @@ import (
 )
 
 func Test_apiConfig_getSettings(t *testing.T) {
-	Convey("Settings successfully filled", t, func() {
+	t.Run("Settings successfully filled", func(t *testing.T) {
 		metricTTLs := map[moira.ClusterKey]time.Duration{
 			moira.MakeClusterKey(moira.GraphiteLocal, moira.DefaultCluster): time.Hour,
 			moira.DefaultGraphiteRemoteCluster:                              24 * time.Hour,
 		}
 
 		webConfig := &webConfig{
+			AllowedExtraAdminContactTypes: []string{"selfstate"},
 			ContactsTemplate: []webContact{
 				{
 					ContactType: "test",
@@ -42,12 +45,15 @@ func Test_apiConfig_getSettings(t *testing.T) {
 				AllowedContactTypes: map[string]struct{}{
 					"test": {},
 				},
+				AllowedExtraAdminContactTypes: map[string]struct{}{
+					"selfstate": {},
+				},
 				LimitedChangeTriggerOwners: make(map[string]struct{}),
 			},
 		}
 
 		result := apiConf.getSettings(metricTTLs, api.FeatureFlags{IsReadonlyEnabled: true}, webConfig)
-		So(result, ShouldResemble, expectedResult)
+		require.Equal(t, expectedResult, result)
 	})
 }
 
