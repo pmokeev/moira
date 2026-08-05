@@ -83,6 +83,14 @@ type TriggerModel struct {
 	WarnValue *float64 `json:"warn_value" binding:"required" example:"500" extensions:"x-nullable"`
 	// ERROR threshold
 	ErrorValue *float64 `json:"error_value" binding:"required" example:"1000" extensions:"x-nullable"`
+	// Seconds the metric must be continuously >= WarnValue before WARN fires. 0 means fire instantly.
+	WarnFor int64 `json:"warn_for,omitempty" example:"0" format:"int64"`
+	// Seconds the metric must be continuously >= ErrorValue before ERROR fires. 0 means fire instantly.
+	ErrorFor int64 `json:"error_for,omitempty" example:"0" format:"int64"`
+	// Seconds to keep reporting WARN after the metric drops below WarnValue. 0 means resolve instantly.
+	WarnKeepFiringFor int64 `json:"warn_keep_firing_for,omitempty" example:"0" format:"int64"`
+	// Seconds to keep reporting ERROR after the metric drops below ErrorValue. 0 means resolve instantly.
+	ErrorKeepFiringFor int64 `json:"error_keep_firing_for,omitempty" example:"0" format:"int64"`
 	// Could be: rising, falling, expression
 	TriggerType string `json:"trigger_type" binding:"required" example:"rising"`
 	// Set of tags to manipulate subscriptions
@@ -131,10 +139,14 @@ func (model *TriggerModel) ToMoiraTrigger() *moira.Trigger {
 		TeamID:         model.TeamID,
 		Name:           model.Name,
 		Desc:           model.Desc,
-		Targets:        model.Targets,
-		WarnValue:      model.WarnValue,
-		ErrorValue:     model.ErrorValue,
-		TriggerType:    model.TriggerType,
+		Targets:            model.Targets,
+		WarnValue:          model.WarnValue,
+		ErrorValue:         model.ErrorValue,
+		WarnFor:            model.WarnFor,
+		ErrorFor:           model.ErrorFor,
+		WarnKeepFiringFor:  model.WarnKeepFiringFor,
+		ErrorKeepFiringFor: model.ErrorKeepFiringFor,
+		TriggerType:        model.TriggerType,
 		Tags:           model.Tags,
 		TTLState:       model.TTLState,
 		TTL:            model.TTL,
@@ -156,10 +168,14 @@ func CreateTriggerModel(trigger *moira.Trigger) TriggerModel {
 		TeamID:         trigger.TeamID,
 		Name:           trigger.Name,
 		Desc:           trigger.Desc,
-		Targets:        trigger.Targets,
-		WarnValue:      trigger.WarnValue,
-		ErrorValue:     trigger.ErrorValue,
-		TriggerType:    trigger.TriggerType,
+		Targets:            trigger.Targets,
+		WarnValue:          trigger.WarnValue,
+		ErrorValue:         trigger.ErrorValue,
+		WarnFor:            trigger.WarnFor,
+		ErrorFor:           trigger.ErrorFor,
+		WarnKeepFiringFor:  trigger.WarnKeepFiringFor,
+		ErrorKeepFiringFor: trigger.ErrorKeepFiringFor,
+		TriggerType:        trigger.TriggerType,
 		Tags:           trigger.Tags,
 		TTLState:       trigger.TTLState,
 		TTL:            trigger.TTL,
@@ -200,6 +216,10 @@ func (trigger *Trigger) Bind(request *http.Request) error {
 	}
 
 	if err := checkWarnErrorExpression(trigger); err != nil {
+		return api.ErrInvalidRequestContent{ValidationError: err}
+	}
+
+	if err := checkDurationThresholds(trigger); err != nil {
 		return api.ErrInvalidRequestContent{ValidationError: err}
 	}
 
@@ -497,6 +517,21 @@ func checkWarnErrorExpression(trigger *Trigger) error {
 	default:
 		return fmt.Errorf("wrong trigger_type: %v, allowable values: '%v', '%v', '%v'",
 			trigger.TriggerType, moira.RisingTrigger, moira.FallingTrigger, moira.ExpressionTrigger)
+	}
+
+	return nil
+}
+
+func checkDurationThresholds(trigger *Trigger) error {
+	switch {
+	case trigger.WarnFor < 0:
+		return fmt.Errorf("warn_for can't be negative")
+	case trigger.ErrorFor < 0:
+		return fmt.Errorf("error_for can't be negative")
+	case trigger.WarnKeepFiringFor < 0:
+		return fmt.Errorf("warn_keep_firing_for can't be negative")
+	case trigger.ErrorKeepFiringFor < 0:
+		return fmt.Errorf("error_keep_firing_for can't be negative")
 	}
 
 	return nil

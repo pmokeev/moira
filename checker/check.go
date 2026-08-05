@@ -453,6 +453,7 @@ func (triggerChecker *TriggerChecker) checkForNoData(
 
 	if triggerChecker.ttlState == moira.TTLStateDEL && metricLastState.EventTimestamp != 0 {
 		if metricLastState.Maintenance != 0 && lastCheckTimeStamp <= metricLastState.Maintenance {
+			// TODO: metricState.ClearDurationState()?
 			metricLastState.DeletedButKept = true
 			return false, &metricLastState
 		}
@@ -460,12 +461,16 @@ func (triggerChecker *TriggerChecker) checkForNoData(
 		return true, nil
 	}
 
-	return false, newMetricState(
+	metricState := newMetricState(
 		metricLastState,
 		triggerChecker.ttlState.ToMetricState(),
 		lastCheckTimeStamp,
 		map[string]float64{},
 	)
+
+	metricState.ClearDurationState()
+
+	return false, metricState
 }
 
 func (triggerChecker *TriggerChecker) getMetricStepsStates(
@@ -560,15 +565,31 @@ func (triggerChecker *TriggerChecker) getMetricDataState(
 
 	expressionState, err := triggerExpression.Evaluate()
 	if err != nil {
+		// TODO: metricState.ClearDurationState()?
 		return nil, err
 	}
 
-	return newMetricState(
+	metricState := newMetricState(
 		*lastState,
 		expressionState,
 		*valueTimestamp,
 		values,
-	), nil
+	)
+
+	if expressionState == moira.StateNODATA || expressionState == moira.StateEXCEPTION {
+		metricState.ClearDurationState()
+
+		return metricState, nil
+	}
+
+	state, warnThreshold, errorThreshold := evaluateThresholds(triggerChecker.trigger, expressionState, *valueTimestamp, *lastState)
+	metricState.State = state
+	metricState.WarnSince = warnThreshold.since
+	metricState.WarnRecoverSince = warnThreshold.recoverSince
+	metricState.ErrorSince = errorThreshold.since
+	metricState.ErrorRecoverSince = errorThreshold.recoverSince
+
+	return metricState, nil
 }
 
 func getExpressionValues(
