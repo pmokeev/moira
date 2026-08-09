@@ -35,10 +35,12 @@ func (t threshold) isFired(now int64) bool {
 //     up to keepFiringFor seconds before resolving.
 func (t threshold) advance(condition bool, now int64) threshold {
 	if condition {
+		// Start the timer on the first satisfying tick, otherwise let it keep ticking.
 		if t.since == 0 {
 			t.since = now
 		}
 
+		// Condition holds again, so cancel any grace period that was counting down.
 		t.recoverSince = 0
 
 		return t
@@ -57,10 +59,12 @@ func (t threshold) advance(condition bool, now int64) threshold {
 		return t
 	}
 
+	// Already fired: anchor the recovery grace period on the first tick the condition drops.
 	if t.recoverSince == 0 {
 		t.recoverSince = now
 	}
 
+	// Keep reporting fired until keepFiringFor seconds have passed (or none is configured).
 	graceElapsed := t.keepFiringFor <= 0 || now-t.recoverSince >= t.keepFiringFor
 	if graceElapsed {
 		t.since = 0
