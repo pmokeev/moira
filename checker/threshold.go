@@ -21,8 +21,8 @@ type threshold struct {
 }
 
 // isFired reports whether the threshold has been continuously satisfied for at least forDuration.
-func (t threshold) isFired(now int64) bool {
-	return t.since != 0 && now-t.since >= t.forDuration
+func (t threshold) isFired(timestamp int64) bool {
+	return t.since != 0 && timestamp-t.since >= t.forDuration
 }
 
 // advance moves the threshold one check step forward and returns the updated threshold:
@@ -33,11 +33,11 @@ func (t threshold) isFired(now int64) bool {
 //     is no grace period before firing.
 //   - While condition is false and the threshold has already fired, it keeps reporting fired for
 //     up to keepFiringFor seconds before resolving.
-func (t threshold) advance(condition bool, now int64) threshold {
+func (t threshold) advance(condition bool, timestamp int64) threshold {
 	if condition {
 		// Start the timer on the first satisfying tick, otherwise let it keep ticking.
 		if t.since == 0 {
-			t.since = now
+			t.since = timestamp
 		}
 
 		// Condition holds again, so cancel any grace period that was counting down.
@@ -51,7 +51,7 @@ func (t threshold) advance(condition bool, now int64) threshold {
 		return t
 	}
 
-	if !t.isFired(now) {
+	if !t.isFired(timestamp) {
 		// Never fired, so it resets immediately - no grace period applies.
 		t.since = 0
 		t.recoverSince = 0
@@ -61,11 +61,11 @@ func (t threshold) advance(condition bool, now int64) threshold {
 
 	// Already fired: anchor the recovery grace period on the first tick the condition drops.
 	if t.recoverSince == 0 {
-		t.recoverSince = now
+		t.recoverSince = timestamp
 	}
 
 	// Keep reporting fired until keepFiringFor seconds have passed (or none is configured).
-	graceElapsed := t.keepFiringFor <= 0 || now-t.recoverSince >= t.keepFiringFor
+	graceElapsed := t.keepFiringFor <= 0 || timestamp-t.recoverSince >= t.keepFiringFor
 	if graceElapsed {
 		t.since = 0
 		t.recoverSince = 0
@@ -90,7 +90,7 @@ func (t threshold) advance(condition bool, now int64) threshold {
 func evaluateThresholds(
 	trigger *moira.Trigger,
 	rawState moira.State,
-	now int64,
+	timestamp int64,
 	prev moira.MetricState,
 ) (state moira.State, warnThreshold, errorThreshold threshold) {
 	isWarnOrAbove := rawState == moira.StateWARN || rawState == moira.StateERROR
@@ -103,8 +103,8 @@ func evaluateThresholds(
 			keepFiringFor: trigger.WarnKeepFiringFor,
 			since:         prev.WarnSince,
 			recoverSince:  prev.WarnRecoverSince,
-		}.advance(isWarnOrAbove, now)
-		isWarnFired = warnThreshold.isFired(now)
+		}.advance(isWarnOrAbove, timestamp)
+		isWarnFired = warnThreshold.isFired(timestamp)
 	}
 
 	isErrorFired := isError
@@ -114,8 +114,8 @@ func evaluateThresholds(
 			keepFiringFor: trigger.ErrorKeepFiringFor,
 			since:         prev.ErrorSince,
 			recoverSince:  prev.ErrorRecoverSince,
-		}.advance(isError, now)
-		isErrorFired = errorThreshold.isFired(now)
+		}.advance(isError, timestamp)
+		isErrorFired = errorThreshold.isFired(timestamp)
 	}
 
 	state = moira.StateOK
