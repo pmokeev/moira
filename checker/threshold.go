@@ -93,28 +93,27 @@ func evaluateThresholds(
 	timestamp int64,
 	prev moira.MetricState,
 ) (state moira.State, warnThreshold, errorThreshold threshold) {
-	isWarnOrAbove := rawState == moira.StateWARN || rawState == moira.StateERROR
-	isError := rawState == moira.StateERROR
-
-	isWarnFired := isWarnOrAbove
+	isWarnFired := rawState == moira.StateWARN || rawState == moira.StateERROR
 	if trigger.WarnFor != 0 || trigger.WarnKeepFiringFor != 0 {
 		warnThreshold = threshold{
 			forDuration:   trigger.WarnFor,
 			keepFiringFor: trigger.WarnKeepFiringFor,
 			since:         prev.WarnSince,
 			recoverSince:  prev.WarnRecoverSince,
-		}.advance(isWarnOrAbove, timestamp)
+		}.advance(isWarnFired, timestamp)
+
 		isWarnFired = warnThreshold.isFired(timestamp)
 	}
 
-	isErrorFired := isError
+	isErrorFired := rawState == moira.StateERROR
 	if trigger.ErrorFor != 0 || trigger.ErrorKeepFiringFor != 0 {
 		errorThreshold = threshold{
 			forDuration:   trigger.ErrorFor,
 			keepFiringFor: trigger.ErrorKeepFiringFor,
 			since:         prev.ErrorSince,
 			recoverSince:  prev.ErrorRecoverSince,
-		}.advance(isError, timestamp)
+		}.advance(isErrorFired, timestamp)
+
 		isErrorFired = errorThreshold.isFired(timestamp)
 	}
 
