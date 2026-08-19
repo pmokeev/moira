@@ -10,34 +10,34 @@ import (
 func TestThresholdAdvance(t *testing.T) {
 	t.Run("Condition met", func(t *testing.T) {
 		t.Run("Was inactive, anchors since to now", func(t *testing.T) {
-			result := threshold{forDuration: 10}.advance(true, 100)
+			result := thresholdState{forDuration: 10}.advance(true, 100)
 			require.Equal(t, int64(100), result.since)
 			require.Equal(t, int64(0), result.recoverSince)
 			require.False(t, result.isFired(100))
 		})
 
 		t.Run("Already ticking, keeps original anchor", func(t *testing.T) {
-			result := threshold{forDuration: 10, since: 100}.advance(true, 105)
+			result := thresholdState{forDuration: 10, since: 100}.advance(true, 105)
 			require.Equal(t, int64(100), result.since)
 			require.Equal(t, int64(0), result.recoverSince)
 			require.False(t, result.isFired(105))
 		})
 
 		t.Run("forDuration elapsed, fires", func(t *testing.T) {
-			result := threshold{forDuration: 10, since: 100}.advance(true, 110)
+			result := thresholdState{forDuration: 10, since: 100}.advance(true, 110)
 			require.Equal(t, int64(100), result.since)
 			require.Equal(t, int64(0), result.recoverSince)
 			require.True(t, result.isFired(110))
 		})
 
 		t.Run("forDuration = 0 fires the same tick it becomes true", func(t *testing.T) {
-			result := threshold{}.advance(true, 100)
+			result := thresholdState{}.advance(true, 100)
 			require.Equal(t, int64(100), result.since)
 			require.True(t, result.isFired(100))
 		})
 
 		t.Run("Cancels an in-progress keep_firing_for countdown", func(t *testing.T) {
-			result := threshold{
+			result := thresholdState{
 				forDuration: 10, keepFiringFor: 20, since: 100, recoverSince: 140,
 			}.advance(true, 150)
 			require.Equal(t, int64(100), result.since)
@@ -48,14 +48,14 @@ func TestThresholdAdvance(t *testing.T) {
 
 	t.Run("Condition not met", func(t *testing.T) {
 		t.Run("Already inactive, no-op", func(t *testing.T) {
-			result := threshold{forDuration: 10}.advance(false, 100)
+			result := thresholdState{forDuration: 10}.advance(false, 100)
 			require.Equal(t, int64(0), result.since)
 			require.Equal(t, int64(0), result.recoverSince)
 			require.False(t, result.isFired(100))
 		})
 
 		t.Run("Before forDuration elapses resets immediately, no grace", func(t *testing.T) {
-			result := threshold{
+			result := thresholdState{
 				forDuration: 10, keepFiringFor: 100, since: 100,
 			}.advance(false, 105)
 			require.Equal(t, int64(0), result.since)
@@ -64,14 +64,14 @@ func TestThresholdAdvance(t *testing.T) {
 		})
 
 		t.Run("After firing, no keepFiringFor configured resolves immediately", func(t *testing.T) {
-			result := threshold{forDuration: 10, since: 100}.advance(false, 111)
+			result := thresholdState{forDuration: 10, since: 100}.advance(false, 111)
 			require.Equal(t, int64(0), result.since)
 			require.Equal(t, int64(0), result.recoverSince)
 			require.False(t, result.isFired(111))
 		})
 
 		t.Run("After firing, within keepFiringFor grace stays fired", func(t *testing.T) {
-			result := threshold{
+			result := thresholdState{
 				forDuration: 10, keepFiringFor: 20, since: 100,
 			}.advance(false, 111)
 			require.Equal(t, int64(100), result.since)
@@ -80,7 +80,7 @@ func TestThresholdAdvance(t *testing.T) {
 		})
 
 		t.Run("Grace already ticking, keeps original recover anchor", func(t *testing.T) {
-			result := threshold{
+			result := thresholdState{
 				forDuration: 10, keepFiringFor: 20, since: 100, recoverSince: 111,
 			}.advance(false, 120)
 			require.Equal(t, int64(100), result.since)
@@ -89,7 +89,7 @@ func TestThresholdAdvance(t *testing.T) {
 		})
 
 		t.Run("Grace elapsed, resolves", func(t *testing.T) {
-			result := threshold{
+			result := thresholdState{
 				forDuration: 10, keepFiringFor: 20, since: 100, recoverSince: 111,
 			}.advance(false, 131)
 			require.Equal(t, int64(0), result.since)
@@ -114,20 +114,20 @@ func TestEvaluateThresholds(t *testing.T) {
 
 		state, warnThreshold, errorThreshold := evaluateThresholds(trigger, moira.StateWARN, 100, moira.MetricState{})
 		require.Equal(t, moira.StateWARN, state)
-		require.Equal(t, threshold{}, warnThreshold)
-		require.Equal(t, threshold{}, errorThreshold)
+		require.Equal(t, thresholdState{}, warnThreshold)
+		require.Equal(t, thresholdState{}, errorThreshold)
 
 		// Prior WarnSince is ignored too: with WarnFor/WarnKeepFiringFor both unset, the warn
 		// threshold is never tracked at all, regardless of what MetricState carried over.
 		state, warnThreshold, errorThreshold = evaluateThresholds(trigger, moira.StateERROR, 110, moira.MetricState{WarnSince: 100})
 		require.Equal(t, moira.StateERROR, state)
-		require.Equal(t, threshold{}, warnThreshold)
-		require.Equal(t, threshold{}, errorThreshold)
+		require.Equal(t, thresholdState{}, warnThreshold)
+		require.Equal(t, thresholdState{}, errorThreshold)
 
 		state, warnThreshold, errorThreshold = evaluateThresholds(trigger, moira.StateOK, 120, moira.MetricState{WarnSince: 100, ErrorSince: 110})
 		require.Equal(t, moira.StateOK, state)
-		require.Equal(t, threshold{}, warnThreshold)
-		require.Equal(t, threshold{}, errorThreshold)
+		require.Equal(t, thresholdState{}, warnThreshold)
+		require.Equal(t, thresholdState{}, errorThreshold)
 	})
 
 	t.Run("Motivating scenario: WarnFor=10s, ErrorFor=10s, 5s WARN band then 5s ERROR band", func(t *testing.T) {

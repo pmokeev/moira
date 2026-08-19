@@ -2,10 +2,10 @@ package checker
 
 import "github.com/moira-alert/moira"
 
-// threshold tracks a single WarnFor/ErrorFor timer: its configuration (forDuration,
+// thresholdState tracks a single WarnFor/ErrorFor timer: its configuration (forDuration,
 // keepFiringFor) together with the bookkeeping that must be persisted between checks
 // (MetricState's WarnSince/WarnRecoverSince or ErrorSince/ErrorRecoverSince).
-type threshold struct {
+type thresholdState struct {
 	// forDuration is how many seconds the metric must continuously satisfy the threshold before
 	// it fires.
 	forDuration int64
@@ -21,11 +21,11 @@ type threshold struct {
 }
 
 // isFired reports whether the threshold has been continuously satisfied for at least forDuration.
-func (t threshold) isFired(timestamp int64) bool {
+func (t thresholdState) isFired(timestamp int64) bool {
 	return t.since != 0 && timestamp-t.since >= t.forDuration
 }
 
-// advance moves the threshold one check step forward and returns the updated threshold:
+// advance moves the threshold state one check step forward and returns the updated state:
 //
 //   - While condition is true, the timer starts (if it wasn't running) or keeps ticking towards
 //     forDuration, and any in-progress keepFiringFor grace period is cancelled.
@@ -33,7 +33,7 @@ func (t threshold) isFired(timestamp int64) bool {
 //     is no grace period before firing.
 //   - While condition is false and the threshold has already fired, it keeps reporting fired for
 //     up to keepFiringFor seconds before resolving.
-func (t threshold) advance(condition bool, timestamp int64) threshold {
+func (t thresholdState) advance(condition bool, timestamp int64) thresholdState {
 	if condition {
 		// Start the timer on the first satisfying tick, otherwise let it keep ticking.
 		if t.since == 0 {
@@ -80,11 +80,11 @@ func (t threshold) advance(condition bool, timestamp int64) threshold {
 // the timer fields instead of calling this function.
 //
 // It returns the effective state for this step (ERROR if errorThreshold is fired, else WARN if
-// warnThreshold is fired, else OK) alongside the updated warn/error thresholds to persist back
-// onto MetricState.
+// warnThreshold is fired, else OK) alongside the updated warn/error threshold states to persist
+// back onto MetricState.
 //
 // For a severity whose For/KeepFiringFor are both zero (the feature isn't configured for it),
-// its threshold is left zero-valued instead of being advanced: mathematically that would
+// its threshold state is left zero-valued instead of being advanced: mathematically that would
 // fire on the very same tick the raw condition becomes true anyway, so skipping it only avoids
 // persisting throwaway since/recoverSince churn on MetricState for triggers that don't use it.
 func evaluateThresholds(
@@ -92,10 +92,10 @@ func evaluateThresholds(
 	rawState moira.State,
 	timestamp int64,
 	prev moira.MetricState,
-) (state moira.State, warnThreshold, errorThreshold threshold) {
+) (state moira.State, warnThreshold, errorThreshold thresholdState) {
 	isWarnFired := rawState == moira.StateWARN || rawState == moira.StateERROR
 	if trigger.WarnFor != 0 || trigger.WarnKeepFiringFor != 0 {
-		warnThreshold = threshold{
+		warnThreshold = thresholdState{
 			forDuration:   trigger.WarnFor,
 			keepFiringFor: trigger.WarnKeepFiringFor,
 			since:         prev.WarnSince,
@@ -107,7 +107,7 @@ func evaluateThresholds(
 
 	isErrorFired := rawState == moira.StateERROR
 	if trigger.ErrorFor != 0 || trigger.ErrorKeepFiringFor != 0 {
-		errorThreshold = threshold{
+		errorThreshold = thresholdState{
 			forDuration:   trigger.ErrorFor,
 			keepFiringFor: trigger.ErrorKeepFiringFor,
 			since:         prev.ErrorSince,
