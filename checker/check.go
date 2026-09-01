@@ -453,7 +453,7 @@ func (triggerChecker *TriggerChecker) checkForNoData(
 
 	if triggerChecker.ttlState == moira.TTLStateDEL && metricLastState.EventTimestamp != 0 {
 		if metricLastState.Maintenance != 0 && lastCheckTimeStamp <= metricLastState.Maintenance {
-			// TODO: metricState.ClearDurationState()?
+			metricLastState.ClearDurationState()
 			metricLastState.DeletedButKept = true
 			return false, &metricLastState
 		}
