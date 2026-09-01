@@ -523,18 +523,22 @@ func checkWarnErrorExpression(trigger *Trigger) error {
 }
 
 func checkDurationThresholds(trigger *Trigger) error {
-	switch {
-	case trigger.WarnFor < 0:
-		return fmt.Errorf("warn_for can't be negative")
-	case trigger.ErrorFor < 0:
-		return fmt.Errorf("error_for can't be negative")
-	case trigger.WarnKeepFiringFor < 0:
-		return fmt.Errorf("warn_keep_firing_for can't be negative")
-	case trigger.ErrorKeepFiringFor < 0:
-		return fmt.Errorf("error_keep_firing_for can't be negative")
+	var err error
+
+	if trigger.WarnFor < 0 {
+		err = errors.Join(err, fmt.Errorf("warn_for can't be negative"))
+	}
+	if trigger.ErrorFor < 0 {
+		err = errors.Join(err, fmt.Errorf("error_for can't be negative"))
+	}
+	if trigger.WarnKeepFiringFor < 0 {
+		err = errors.Join(err, fmt.Errorf("warn_keep_firing_for can't be negative"))
+	}
+	if trigger.ErrorKeepFiringFor < 0 {
+		err = errors.Join(err, fmt.Errorf("error_keep_firing_for can't be negative"))
 	}
 
-	return nil
+	return err
 }
 
 func checkSimpleModeFields(trigger *Trigger) error {
