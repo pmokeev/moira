@@ -2,22 +2,13 @@ package checker
 
 import "github.com/moira-alert/moira"
 
-// thresholdState tracks a single WarnFor/ErrorFor timer: its configuration (forDuration,
-// keepFiringFor) together with the bookkeeping that must be persisted between checks
-// (MetricState's WarnSince/WarnRecoverSince or ErrorSince/ErrorRecoverSince).
+// thresholdState tracks a single WarnFor/ErrorFor timer: its configuration together with the
+// bookkeeping that must be persisted between checks (MetricState's *Since/*RecoverSince fields).
 type thresholdState struct {
-	// forDuration is how many seconds the metric must continuously satisfy the threshold before
-	// it fires.
-	forDuration int64
-	// keepFiringFor is how many seconds to keep reporting the threshold as fired after the metric
-	// stops satisfying it. Zero means resolve immediately once the metric recovers.
+	forDuration   int64
 	keepFiringFor int64
-	// since is the unix timestamp when the metric started continuously satisfying the threshold,
-	// or zero if it currently isn't.
-	since int64
-	// recoverSince is the unix timestamp when the metric first stopped satisfying an
-	// already-fired threshold, or zero if no recovery grace period is running.
-	recoverSince int64
+	since         int64
+	recoverSince  int64
 }
 
 // isFired reports whether the threshold has been continuously satisfied for at least forDuration.
@@ -25,17 +16,9 @@ func (t thresholdState) isFired(timestamp int64) bool {
 	return t.since != 0 && timestamp-t.since >= t.forDuration
 }
 
-// advance moves the threshold state one check step forward and returns the updated state:
-//
-//   - While condition is true, the timer starts (if it wasn't running) or keeps ticking towards
-//     forDuration, and any in-progress keepFiringFor grace period is cancelled.
-//   - While condition is false and the threshold hasn't fired yet, it resets immediately - there
-//     is no grace period before firing.
-//   - While condition is false and the threshold has already fired, it keeps reporting fired for
-//     up to keepFiringFor seconds before resolving.
+// advance moves the threshold state one check step forward and returns the updated state.
 func (t thresholdState) advance(condition bool, timestamp int64) thresholdState {
 	if condition {
-		// Start the timer on the first satisfying tick, otherwise let it keep ticking.
 		if t.since == 0 {
 			t.since = timestamp
 		}
@@ -47,7 +30,6 @@ func (t thresholdState) advance(condition bool, timestamp int64) thresholdState 
 	}
 
 	if t.since == 0 {
-		// Already inactive, nothing to advance.
 		return t
 	}
 
@@ -64,7 +46,6 @@ func (t thresholdState) advance(condition bool, timestamp int64) thresholdState 
 		t.recoverSince = timestamp
 	}
 
-	// Keep reporting fired until keepFiringFor seconds have passed (or none is configured).
 	graceElapsed := t.keepFiringFor <= 0 || timestamp-t.recoverSince >= t.keepFiringFor
 	if graceElapsed {
 		t.since = 0
@@ -75,18 +56,9 @@ func (t thresholdState) advance(condition bool, timestamp int64) thresholdState 
 }
 
 // evaluateThresholds implements the WarnFor/ErrorFor/WarnKeepFiringFor/ErrorKeepFiringFor
-// semantics. It must only be called with a raw state of OK, WARN or ERROR;
-// NODATA/EXCEPTION are handled by the caller, which resets
-// the timer fields instead of calling this function.
-//
-// It returns the effective state for this step (ERROR if errorThreshold is fired, else WARN if
-// warnThreshold is fired, else OK) alongside the updated warn/error threshold states to persist
-// back onto MetricState.
-//
-// For a severity whose For/KeepFiringFor are both zero (the feature isn't configured for it),
-// its threshold state is left zero-valued instead of being advanced: mathematically that would
-// fire on the very same tick the raw condition becomes true anyway, so skipping it only avoids
-// persisting throwaway since/recoverSince churn on MetricState for triggers that don't use it.
+// semantics. It must only be called with a raw state of OK, WARN or ERROR; NODATA/EXCEPTION are
+// handled by the caller. A severity whose For/KeepFiringFor are both zero is left zero-valued
+// instead of advanced, since it would fire on the same tick the raw condition becomes true anyway.
 func evaluateThresholds(
 	trigger *moira.Trigger,
 	rawState moira.State,
