@@ -248,6 +248,12 @@ func newMetricState(oldMetricState moira.MetricState, newState moira.State, newT
 	newMetricState.EventTimestamp = 0
 	newMetricState.SuppressedState = ""
 
+	// Duration-threshold bookkeeping is only meaningful for OK/WARN/ERROR; any other state
+	// interrupts the WarnFor/ErrorFor timers.
+	if !newState.TracksDuration() {
+		newMetricState.ClearDurationState()
+	}
+
 	return &newMetricState
 }
 
@@ -468,8 +474,6 @@ func (triggerChecker *TriggerChecker) checkForNoData(
 		map[string]float64{},
 	)
 
-	metricState.ClearDurationState()
-
 	return false, metricState
 }
 
@@ -565,7 +569,6 @@ func (triggerChecker *TriggerChecker) getMetricDataState(
 
 	expressionState, err := triggerExpression.Evaluate()
 	if err != nil {
-		// TODO: metricState.ClearDurationState()?
 		return nil, err
 	}
 
@@ -577,8 +580,6 @@ func (triggerChecker *TriggerChecker) getMetricDataState(
 	)
 
 	if expressionState == moira.StateNODATA || expressionState == moira.StateEXCEPTION {
-		metricState.ClearDurationState()
-
 		return metricState, nil
 	}
 
