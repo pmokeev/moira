@@ -169,6 +169,7 @@ func TestEvaluateThresholds(t *testing.T) {
 		// ERROR's timer (anchored at base+5) has only accumulated 5s -> not fired yet.
 		state, warnThreshold, errorThreshold := evaluateThresholds(trigger, moira.StateERROR, base+10, metricState)
 		require.Equal(t, moira.StateWARN, state)
+
 		metricState.WarnSince = warnThreshold.since
 		metricState.ErrorSince = errorThreshold.since
 
@@ -176,6 +177,7 @@ func TestEvaluateThresholds(t *testing.T) {
 		for now := base + 11; now <= base+14; now++ {
 			state, _, errorThreshold := evaluateThresholds(trigger, moira.StateERROR, now, metricState)
 			require.Equal(t, moira.StateWARN, state)
+
 			metricState.ErrorSince = errorThreshold.since
 		}
 
@@ -207,11 +209,13 @@ func TestEvaluateThresholds(t *testing.T) {
 		metricState := moira.MetricState{}
 		state, warnThreshold, _ := evaluateThresholds(trigger, moira.StateWARN, 100, metricState)
 		require.Equal(t, moira.StateWARN, state)
+
 		metricState.WarnSince, metricState.WarnRecoverSince = warnThreshold.since, warnThreshold.recoverSince
 
 		// dip below threshold, within grace
 		state, warnThreshold, _ = evaluateThresholds(trigger, moira.StateOK, 110, metricState)
 		require.Equal(t, moira.StateWARN, state)
+
 		metricState.WarnSince, metricState.WarnRecoverSince = warnThreshold.since, warnThreshold.recoverSince
 
 		// grace elapses (started at t=110, WarnKeepFiringFor=20 -> elapses at t=130)
