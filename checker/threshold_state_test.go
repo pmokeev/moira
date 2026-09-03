@@ -145,9 +145,11 @@ func TestEvaluateThresholds(t *testing.T) {
 		for now := base; now <= base+4; now++ {
 			state, warnThreshold, errorThreshold := evaluateThresholds(trigger, moira.StateWARN, now, metricState)
 			require.Equal(t, moira.StateOK, state)
+
 			metricState.WarnSince, metricState.WarnRecoverSince = warnThreshold.since, warnThreshold.recoverSince
 			metricState.ErrorSince, metricState.ErrorRecoverSince = errorThreshold.since, errorThreshold.recoverSince
 		}
+
 		require.Equal(t, base, metricState.WarnSince)
 
 		// base+5..base+9: ERROR band. WarnFor keeps accumulating from the original base+0 anchor
@@ -155,9 +157,11 @@ func TestEvaluateThresholds(t *testing.T) {
 		for now := base + 5; now <= base+9; now++ {
 			state, warnThreshold, errorThreshold := evaluateThresholds(trigger, moira.StateERROR, now, metricState)
 			require.Equal(t, moira.StateOK, state)
+
 			metricState.WarnSince = warnThreshold.since
 			metricState.ErrorSince = errorThreshold.since
 		}
+
 		require.Equal(t, base, metricState.WarnSince)
 		require.Equal(t, base+5, metricState.ErrorSince)
 
@@ -224,12 +228,14 @@ func TestEvaluateThresholds(t *testing.T) {
 		metricState := moira.MetricState{}
 		state, warnThreshold, errorThreshold := evaluateThresholds(trigger, moira.StateERROR, 100, metricState)
 		require.Equal(t, moira.StateERROR, state)
+
 		metricState.WarnSince = warnThreshold.since
 		metricState.ErrorSince, metricState.ErrorRecoverSince = errorThreshold.since, errorThreshold.recoverSince
 
 		// drops to WARN band: WARN condition true, ERROR condition false -> ERROR grace starts.
 		state, warnThreshold, errorThreshold = evaluateThresholds(trigger, moira.StateWARN, 110, metricState)
 		require.Equal(t, moira.StateERROR, state) // still within ErrorKeepFiringFor grace
+
 		metricState.WarnSince = warnThreshold.since
 		metricState.ErrorSince, metricState.ErrorRecoverSince = errorThreshold.since, errorThreshold.recoverSince
 

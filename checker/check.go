@@ -461,6 +461,7 @@ func (triggerChecker *TriggerChecker) checkForNoData(
 		if metricLastState.Maintenance != 0 && lastCheckTimeStamp <= metricLastState.Maintenance {
 			metricLastState.ClearDurationState()
 			metricLastState.DeletedButKept = true
+
 			return false, &metricLastState
 		}
 
